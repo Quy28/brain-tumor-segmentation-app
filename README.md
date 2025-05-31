@@ -1,12 +1,22 @@
-# 🧠 Brain Tumor Segmentation Web App
+# 🧠 Brain Tumor Segmentation App
 
-This app segments brain tumors from MRI images using a pretrained U-Net model trained in TensorFlow 2.17.1.
+Streamlit app for segmenting brain tumors from MRI images using a trained U-Net model.
 
-## 🛠 How to Use
-1. Upload an MRI image (.jpg/.png).
-2. The app will return the predicted tumor mask overlay.
+## ✅ Key Features
+- Upload MRI image (PNG/JPG)
+- Predict tumor mask with a U-Net model (.keras)
+- Automatic download of model from Google Drive if not present
 
-## ✅ Environment
+## 🔧 Environment
+
+This app is built and tested on **Python 3.10.12**, the same as used on Kaggle.
+
+Make sure Streamlit Cloud uses the correct Python version.
+
+## 📦 Requirements
+
+See `requirements.txt` for all dependencies:
 - TensorFlow 2.17.1
-- Python 3.10.12
-- Deployed on Streamlit Cloud
+- OpenCV (headless version)
+- Streamlit 1.34.0
+- Python 3.10.12 ✅
