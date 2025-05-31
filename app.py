@@ -1,66 +1,55 @@
 import streamlit as st
 import numpy as np
-import tensorflow as tf
+import cv2
 from PIL import Image
+import tensorflow as tf
+from tensorflow.keras.utils import register_keras_serializable
 import requests
-import os
+from pathlib import Path
 
-# ========== CONFIG ==========
-MODEL_PATH = "my_trained_model.keras"
-FILE_ID = "1FvLjJAjCO85Cwmj2IENVPAPhTF-Fnkn_"
-GDRIVE_URL = f"https://drive.google.com/uc?id={FILE_ID}"
+# Khai báo custom loss
+@register_keras_serializable()
+def weighted_dice_loss(y_true, y_pred, weight=0.7):
+    smooth = 1e-6
+    intersection = tf.reduce_sum(y_true * y_pred)
+    dice = (2. * intersection + smooth) / (tf.reduce_sum(y_true) + tf.reduce_sum(y_pred) + smooth)
+    return 1 - dice * weight
 
-# ========== CUSTOM LOSS / METRIC PLACEHOLDER ==========
-# Nếu model dùng custom loss, bạn cần định nghĩa nó để load
-# Dưới đây là ví dụ với dice_loss
-def dice_loss(y_true, y_pred):
-    y_true_f = tf.keras.backend.flatten(y_true)
-    y_pred_f = tf.keras.backend.flatten(y_pred)
-    intersection = tf.reduce_sum(y_true_f * y_pred_f)
-    return 1 - (2. * intersection + 1) / (tf.reduce_sum(y_true_f) + tf.reduce_sum(y_pred_f) + 1)
+# Tải model nếu chưa tồn tại
+def download_model(model_path, file_id):
+    if not Path(model_path).exists():
+        url = f"https://drive.google.com/uc?id={file_id}"
+        r = requests.get(url)
+        with open(model_path, 'wb') as f:
+            f.write(r.content)
 
-custom_objects = {
-    "dice_loss": dice_loss
-}
-
-# ========== DOWNLOAD MODEL IF NEEDED ==========
-@st.cache_resource
-def download_model():
-    if not os.path.exists(MODEL_PATH):
-        with st.spinner("Downloading model from Google Drive..."):
-            response = requests.get(GDRIVE_URL)
-            with open(MODEL_PATH, "wb") as f:
-                f.write(response.content)
-
-# ========== LOAD MODEL ==========
+# Load model
 @st.cache_resource
 def load_model():
-    download_model()
-    return tf.keras.models.load_model(MODEL_PATH, custom_objects=custom_objects)
+    model_path = "my_trained_model.keras"
+    file_id = "1FvLjJAjCO85Cwmj2IENVPAPhTF-Fnkn_"
+    download_model(model_path, file_id)
+    return tf.keras.models.load_model(model_path, custom_objects={"weighted_dice_loss": weighted_dice_loss})
 
 model = load_model()
 
-# ========== STREAMLIT UI ==========
+# Streamlit UI
 st.title("🧠 Brain Tumor Segmentation")
+st.markdown("Upload an MRI image. The model will predict the tumor segmentation mask.")
 
-uploaded_file = st.file_uploader("Upload an MRI Image", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Upload MRI Image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-    st.subheader("Original Image")
-    st.image(image, use_column_width=True)
+    st.image(image, caption="Original Image", use_column_width=True)
 
-    # Preprocessing
-    img_resized = image.resize((256, 256))
-    img_array = np.array(img_resized) / 255.0
-    input_array = np.expand_dims(img_array, axis=0)
+    img = np.array(image.resize((256, 256))) / 255.0
+    input_tensor = np.expand_dims(img, axis=0)
 
-    # Predict mask
-    prediction = model.predict(input_array)
-    predicted_mask = np.squeeze(prediction)
+    with st.spinner("Predicting..."):
+        pred_mask = model.predict(input_tensor)[0]
 
-    # Convert mask to image (grayscale)
-    mask_image = Image.fromarray((predicted_mask * 255).astype(np.uint8))
+    mask = (pred_mask > 0.5).astype(np.uint8) * 255
+    mask_rgb = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
 
-    st.subheader("Predicted Mask")
-    st.image(mask_image, use_column_width=True, caption="Tumor Segmentation Output")
+    st.image(mask_rgb, caption="Predicted Tumor Mask", use_column_width=True)
